@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: {{ include "employee-management.backend.fullname" . }}-deployment
+
+spec:
+  replicas: {{ .Values.backend.replicaCount }}
+
+  selector:
+    matchLabels:
+      app: {{ include "employee-management.backend.fullname" . }}
+
+  template:
+    metadata:
+      labels:
+        app: {{ include "employee-management.backend.fullname" . }}
+
+    spec:
+      containers:
+        - name: backend
+          image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
+          imagePullPolicy: Always
+
+          ports:
+            - containerPort: {{ .Values.backend.service.port }} 
+
+          envFrom:
+            - configMapRef:
+                name: {{ include "employee-management.backend.fullname" . }}-config
+
+            - secretRef:
+                name: {{ include "employee-management.backend.fullname" . }}-secret
+
+
+

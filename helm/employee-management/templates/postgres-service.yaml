@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: {{ include "employee-management.postgres.fullname" . }}-service
+
+spec:
+  selector:
+    app: {{ include "employee-management.postgres.fullname" . }}
+
+  ports:
+    - port: {{ .Values.postgres.service.port }}
+      targetPort: {{ .Values.postgres.service.port }}
+
+  type: ClusterIP

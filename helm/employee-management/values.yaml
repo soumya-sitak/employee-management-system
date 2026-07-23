@@ -1,0 +1,26 @@
+backend:
+  replicaCount: 2
+
+  name: employee-backend
+
+  image:
+    repository: soumyasitak/employee-backend
+    tag: v4
+  
+  service:
+    port: 5000
+  
+postgres:
+  name: postgres
+
+  storage:
+    size: 1Gi
+
+  service:
+      port: 5432
+
+  image:
+    repository: postgres
+    tag: "17"
+
+  replicaCount: 1

@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "employee-management.backend.fullname" . }}-config
+data:
+  DB_HOST: postgres-service
+  DB_PORT: "5432"
+  DB_NAME: employee_db

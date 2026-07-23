@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: {{ include "employee-management.backend.fullname" . }}-service
+
+spec:
+  selector:
+    app: {{ include "employee-management.backend.fullname" . }}
+
+  ports:
+    - port: 5000
+      targetPort: 5000
+
+  type: ClusterIP

@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: StatefulSet
+
+metadata:
+  name: {{ include "employee-management.postgres.fullname" . }}
+
+spec:
+  serviceName: {{ include "employee-management.postgres.fullname" . }}-service
+
+  replicas: {{ .Values.postgres.replicaCount }}
+
+  selector:
+    matchLabels:
+      app: {{ include "employee-management.postgres.fullname" . }}
+
+  template:
+    metadata:
+      labels:
+        app: {{ include "employee-management.postgres.fullname" . }}
+
+    spec:
+      containers:
+      - name: postgres
+
+        image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
+
+        ports:
+        - containerPort: {{ .Values.postgres.service.port }}
+
+        envFrom:
+        - secretRef:
+            name: {{ include "employee-management.postgres.fullname" . }}-secret
+
+        - configMapRef:
+            name: {{ include "employee-management.postgres.fullname" . }}-config
+
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+
+      volumes:
+      - name: postgres-storage
+        persistentVolumeClaim:
+          claimName: {{ include "employee-management.postgres.fullname" . }}-pvc
