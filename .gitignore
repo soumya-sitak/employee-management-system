@@ -23,3 +23,34 @@ Thumbs.db
 dist/
 build/
 .next/
+
+# ==========================
+# Java / Spring Boot
+# ==========================
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+# Maven
+.mvn/timing.properties
+
+# Gradle
+.gradle/
+
+# ==========================
+# Docker
+# ==========================
+docker-compose.override.yml
+
+# ==========================
+# Helm
+# ==========================
+*.tgz
+
+# ==========================
+# Temporary files
+# ==========================
+*.tmp
+*.swp
