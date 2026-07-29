@@ -9,7 +9,7 @@ spec:
     app: {{ include "employee-management.backend.fullname" . }}
 
   ports:
-    - port: 5000
-      targetPort: 5000
+    - port: {{ .Values.backend.service.port }}
+      targetPort: {{ .Values.backend.service.port }}
 
   type: ClusterIP

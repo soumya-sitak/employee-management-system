@@ -5,7 +5,7 @@ backend:
 
   image:
     repository: soumyasitak/employee-backend
-    tag: v4
+    tag: latest
   
   service:
     port: 5000

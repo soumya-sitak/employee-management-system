@@ -23,7 +23,29 @@ spec:
           imagePullPolicy: Always
 
           ports:
-            - containerPort: {{ .Values.backend.service.port }} 
+            - containerPort: {{ .Values.backend.service.port }}
+
+          readinessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.backend.service.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+          livenessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.backend.service.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
 
           envFrom:
             - configMapRef:
@@ -31,6 +53,3 @@ spec:
 
             - secretRef:
                 name: {{ include "employee-management.backend.fullname" . }}-secret
-
-
-

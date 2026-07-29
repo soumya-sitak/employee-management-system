@@ -14,7 +14,7 @@ app.use(express.json());
 // Routes
 app.use("/employees", employeeRoutes);
 
-// Test Route
+// Health check
 app.get("/", (req, res) => {
   res.send("Employee Management Backend is Running!");
 });
@@ -35,7 +35,10 @@ app.get("/db-test", async (req, res) => {
   }
 });
 
-// Start Server
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+module.exports = app;
+
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
