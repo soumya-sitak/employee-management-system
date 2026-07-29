@@ -19,11 +19,33 @@ spec:
     spec:
       containers:
         - name: backend
-          image: soumyasitak/employee-backend:v4
+          image: soumyasitak/employee-backend:latest
           imagePullPolicy: Always
 
           ports:
             - containerPort: 5000
+
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 5000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
 
           envFrom:
             - configMapRef:
@@ -31,6 +53,3 @@ spec:
 
             - secretRef:
                 name: backend-secret
-
-
-

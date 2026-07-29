@@ -21,24 +21,51 @@ spec:
     spec:
       containers:
       - name: postgres
-
         image: postgres:17
 
         ports:
         - containerPort: 5432
 
+        env:
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+
         envFrom:
         - secretRef:
             name: postgres-secret
-
         - configMapRef:
             name: postgres-config
+
+        readinessProbe:
+          exec:
+            command: ["pg_isready", "-U", "admin", "-d", "employee_db"]
+          initialDelaySeconds: 10
+          periodSeconds: 10
+
+        livenessProbe:
+          exec:
+            command: ["pg_isready", "-U", "admin", "-d", "employee_db"]
+          initialDelaySeconds: 30
+          periodSeconds: 20
+
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
 
         volumeMounts:
         - name: postgres-storage
           mountPath: /var/lib/postgresql/data
+        - name: postgres-init
+          mountPath: /docker-entrypoint-initdb.d
 
       volumes:
       - name: postgres-storage
         persistentVolumeClaim:
           claimName: postgres-pvc
+      - name: postgres-init
+        configMap:
+          name: postgres-init
