@@ -119,6 +119,34 @@ EOF
             }
         }
 
+        stage('Ensure Database Schema') {
+            when {
+                branch 'master'
+            }
+            steps {
+                container('kubectl') {
+                    sh '''
+                        kubectl wait --for=condition=ready pod \
+                            -l app=employee-management-postgres \
+                            -n ${NAMESPACE} --timeout=180s
+
+                        POD=$(kubectl get pod -n ${NAMESPACE} \
+                            -l app=employee-management-postgres \
+                            -o jsonpath='{.items[0].metadata.name}')
+
+                        kubectl exec -n ${NAMESPACE} "$POD" -- \
+                            psql -U admin -d employee_db -c "
+                            CREATE TABLE IF NOT EXISTS employees (
+                              id SERIAL PRIMARY KEY,
+                              name VARCHAR(255) NOT NULL,
+                              age INTEGER NOT NULL,
+                              department VARCHAR(255) NOT NULL
+                            );"
+                    '''
+                }
+            }
+        }
+
         stage('Verify Deployment') {
             when {
                 branch 'master'

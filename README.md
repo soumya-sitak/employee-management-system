@@ -220,7 +220,8 @@ kubectl get sa jenkins-deployer -n jenkins
 2. Build and push image to Docker Hub (`BUILD_NUMBER` and `GIT_COMMIT` tags)
 3. `helm lint`
 4. Deploy to `dev` namespace (only on `master` branch)
-5. Verify rollout with `kubectl rollout status`
+5. Ensure `employees` table exists (non-destructive; preserves existing data)
+6. Verify rollout with `kubectl rollout status`
 
 ### Trigger a deploy
 
@@ -237,7 +238,7 @@ curl http://localhost:5000/
 curl http://localhost:5000/employees
 ```
 
-> **Note:** If Postgres was deployed before the init script was added, delete the old PVC in `dev` and redeploy so the `employees` table is created.
+> **Note:** Postgres data is stored on a PVC and is never deleted by the pipeline. If the `employees` table is missing, the pipeline creates it with `CREATE TABLE IF NOT EXISTS` without affecting existing rows.
 
 ## Environment Variables
 
