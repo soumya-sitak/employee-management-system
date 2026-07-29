@@ -207,6 +207,40 @@ kubectl apply -f k8s/jenkins/jenkins-deployer-rbac.yaml
 kubectl get sa jenkins-deployer -n jenkins
 ```
 
+### Access Jenkins
+
+Retrieve the admin credentials from the cluster (do not store passwords in this repo):
+
+```bash
+# Username
+kubectl get secret jenkins -n jenkins -o jsonpath="{.data.jenkins-admin-user}" | base64 -d && echo
+
+# Password
+kubectl get secret jenkins -n jenkins -o jsonpath="{.data.jenkins-admin-password}" | base64 -d && echo
+```
+
+**Local access** (from a machine with `kubectl` configured):
+
+```bash
+kubectl port-forward -n jenkins svc/jenkins 8081:8080
+```
+
+Open `http://localhost:8081` in your browser.
+
+**Remote access via SSH tunnel** (e.g. Jenkins runs on a Windows host; forward from your laptop):
+
+```bash
+# Interactive session with port forward
+ssh -L 8080:localhost:8080 user@windows-host
+
+# Background tunnel only (no remote shell)
+ssh -N -L 8080:localhost:8080 user@windows-host
+```
+
+Then open `http://localhost:8080`. Replace `user@windows-host` with your SSH user and host.
+
+> **Security:** Store GitHub PAT and Docker Hub credentials only in Jenkins (**Manage Jenkins → Credentials**), never in `README.md` or git. If a token was exposed, revoke it in GitHub and create a new one.
+
 ### Jenkins credentials required
 
 | ID | Type | Purpose |
