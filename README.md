@@ -9,6 +9,7 @@ A full-stack employee management application with a Node.js REST API, PostgreSQL
 - Dockerized backend
 - Kubernetes manifests for backend and Postgres
 - Helm chart for parameterized deployments
+- Jenkins CI/CD pipeline (build, test, deploy)
 
 ## Tech Stack
 
@@ -25,17 +26,19 @@ A full-stack employee management application with a Node.js REST API, PostgreSQL
 employee-management-system/
 ├── backend/                 # Express REST API
 │   ├── app.js
+│   ├── app.test.js
 │   ├── db.js
 │   ├── routes/
 │   └── Dockerfile
-├── database/                # Database scripts (optional)
-├── frontend/                # UI (planned)
 ├── helm/employee-management # Helm chart
 ├── k8s/                     # Raw Kubernetes manifests
 │   ├── backend/
 │   ├── config/
+│   ├── jenkins/             # Jenkins deployer RBAC
 │   └── postgres/
-└── jenkins/                 # CI/CD (planned)
+├── jenkins/                 # Jenkins Helm chart
+├── Jenkinsfile              # CI/CD pipeline
+└── frontend/                # UI (planned)
 ```
 
 ## Prerequisites
@@ -178,7 +181,7 @@ backend:
   replicaCount: 2
   image:
     repository: soumyasitak/employee-backend
-    tag: v4
+    tag: latest
 
 postgres:
   storage:
@@ -186,6 +189,55 @@ postgres:
   image:
     tag: "17"
 ```
+
+Deploy to a specific namespace:
+
+```bash
+helm upgrade --install employee-management ./helm/employee-management \
+  --namespace dev \
+  --create-namespace
+```
+
+## CI/CD (Jenkins)
+
+### One-time cluster setup
+
+```bash
+kubectl apply -f k8s/jenkins/jenkins-deployer-rbac.yaml
+kubectl get sa jenkins-deployer -n jenkins
+```
+
+### Jenkins credentials required
+
+| ID | Type | Purpose |
+| ---- | ------ | --------- |
+| `github-pat` | Username/password or secret text | Git checkout |
+| `dockerhub-credentials` | Username/password | Push Docker image |
+
+### Pipeline flow
+
+1. `npm ci` and `npm test`
+2. Build and push image to Docker Hub (`BUILD_NUMBER` and `GIT_COMMIT` tags)
+3. `helm lint`
+4. Deploy to `dev` namespace (only on `master` branch)
+5. Verify rollout with `kubectl rollout status`
+
+### Trigger a deploy
+
+Push to `master` — Jenkins runs the pipeline from `Jenkinsfile`.
+
+Configure a **Pipeline** job with **Pipeline script from SCM**, branch `master`, script path `Jenkinsfile`. Ensure agent pods run in the `jenkins` namespace (where `jenkins-deployer` ServiceAccount exists).
+
+### Verify after deploy
+
+```bash
+kubectl get pods -n dev
+kubectl port-forward -n dev svc/employee-management-employee-backend-service 5000:5000
+curl http://localhost:5000/
+curl http://localhost:5000/employees
+```
+
+> **Note:** If Postgres was deployed before the init script was added, delete the old PVC in `dev` and redeploy so the `employees` table is created.
 
 ## Environment Variables
 
@@ -200,10 +252,9 @@ postgres:
 ## Roadmap
 
 - [ ] Frontend UI
-- [ ] Database migration scripts in `database/`
-- [ ] CI/CD pipeline (Jenkins or GitHub Actions)
+- [x] CI/CD pipeline (Jenkins)
 - [ ] Ingress and TLS
-- [ ] Unit and integration tests
+- [x] Unit tests (backend health check)
 
 ## License
 
