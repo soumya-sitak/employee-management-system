@@ -1,13 +1,14 @@
 # Employee Management System
 
-A cloud-native employee management application with a Node.js REST API, PostgreSQL database, Kubernetes deployments, Jenkins CI/CD, and Prometheus/Grafana monitoring.
+A cloud-native employee management application with a React frontend, Node.js REST API, PostgreSQL database, Kubernetes deployments, Jenkins CI/CD, and Prometheus/Grafana monitoring.
 
 ## Features
 
+- React UI for viewing and adding employees
 - REST API for listing and creating employees
 - PostgreSQL persistence
-- Dockerized backend
-- Kubernetes manifests for backend and Postgres
+- Dockerized frontend and backend
+- Kubernetes manifests for frontend, backend, and Postgres
 - Helm chart for parameterized deployments
 - Jenkins CI/CD pipeline (build, test, deploy)
 - Prometheus and Grafana monitoring stack
@@ -16,6 +17,7 @@ A cloud-native employee management application with a Node.js REST API, PostgreS
 
 | Layer         | Technology                        |
 | ------------- | --------------------------------- |
+| Frontend      | React 19, Vite, nginx             |
 | Backend       | Node.js, Express 5                |
 | Database      | PostgreSQL 17                     |
 | Container     | Docker                            |
@@ -23,6 +25,109 @@ A cloud-native employee management application with a Node.js REST API, PostgreS
 | CI/CD         | Jenkins, Kaniko                   |
 | Monitoring    | Prometheus, Grafana, Alertmanager |
 | Local K8s     | Rancher Desktop                   |
+
+## Quick Start (Rancher Desktop)
+
+Use this when you want the **full stack on local Kubernetes** after cloning the repo.
+
+### 1. Prerequisites
+
+- [Rancher Desktop](https://rancherdesktop.io/) with Kubernetes enabled
+- `kubectl`, `helm`, and `docker` on your PATH
+- Context set to Rancher Desktop:
+
+```bash
+kubectl config use-context rancher-desktop
+kubectl get nodes
+```
+
+### 2. Build images locally
+
+Rancher Desktop shares images with its embedded Kubernetes, so you do not need to push to Docker Hub for local testing.
+
+```bash
+git clone https://github.com/soumya-sitak/employee-management-system.git
+cd employee-management-system
+
+docker build -t soumyasitak/employee-backend:local ./backend
+docker build -t soumyasitak/employee-frontend:local ./frontend
+```
+
+### 3. Deploy the application
+
+```bash
+helm upgrade --install employee-management ./helm/employee-management \
+  --namespace dev \
+  --create-namespace \
+  --set backend.image.tag=local \
+  --set backend.image.pullPolicy=IfNotPresent \
+  --set frontend.image.tag=local \
+  --set frontend.image.pullPolicy=IfNotPresent
+```
+
+Wait for pods:
+
+```bash
+kubectl get pods -n dev -w
+```
+
+All five pods should reach `Running` (2 backend, 2 frontend, 1 postgres).
+
+### 4. Create the database table (first time only)
+
+```bash
+kubectl wait --for=condition=ready pod -l app=employee-management-postgres -n dev --timeout=120s
+
+POD=$(kubectl get pod -n dev -l app=employee-management-postgres -o jsonpath='{.items[0].metadata.name}')
+
+kubectl exec -n dev "$POD" -- psql -U admin -d employee_db -c "
+CREATE TABLE IF NOT EXISTS employees (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  age INTEGER NOT NULL,
+  department VARCHAR(255) NOT NULL
+);"
+```
+
+### 5. Open the UI
+
+```bash
+kubectl port-forward -n dev svc/employee-management-employee-frontend-service 8080:80
+```
+
+Open **http://localhost:8080** — add employees in the form and confirm they appear in the table.
+
+### 6. (Optional) Install monitoring
+
+```bash
+helm dependency update ./monitoring
+
+helm upgrade --install monitoring ./monitoring \
+  --namespace monitoring \
+  --create-namespace
+
+kubectl port-forward -n monitoring svc/monitoring-grafana 3000:80
+kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-prometheus 9090:9090
+```
+
+| Service    | URL                     | Login           |
+| ---------- | ----------------------- | --------------- |
+| Grafana    | http://localhost:3000   | `admin` / `admin` |
+| Prometheus | http://localhost:9090   | —               |
+
+See [monitoring/README.md](monitoring/README.md) for more detail.
+
+## Ports & URLs (cheat sheet)
+
+| What              | URL / command |
+| ----------------- | ------------- |
+| Frontend (local dev) | http://localhost:5173 |
+| Backend (local dev)  | http://localhost:5000 |
+| Frontend (K8s port-forward) | `kubectl port-forward -n dev svc/employee-management-employee-frontend-service 8080:80` → http://localhost:8080 |
+| Backend (K8s port-forward)  | `kubectl port-forward -n dev svc/employee-management-employee-backend-service 5000:5000` → http://localhost:5000 |
+| Jenkins           | `kubectl port-forward -n jenkins svc/jenkins 8081:8080` → http://localhost:8081 |
+| Grafana           | `kubectl port-forward -n monitoring svc/monitoring-grafana 3000:80` → http://localhost:3000 |
+| Prometheus        | `kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-prometheus 9090:9090` → http://localhost:9090 |
 
 ## Architecture
 
@@ -40,6 +145,7 @@ flowchart TB
 
     subgraph K8s["Kubernetes Cluster"]
         subgraph App["dev namespace"]
+            UI[employee-frontend<br/>React + nginx]
             API[employee-backend]
             DB[(PostgreSQL)]
         end
@@ -49,66 +155,54 @@ flowchart TB
         end
     end
 
+    User[Browser] --> UI
+    UI -->|"/api proxy"| API
     Git --> Jenkins
     Jenkins --> Kaniko
     Kaniko --> DockerHub
+    Jenkins -->|Helm deploy| UI
     Jenkins -->|Helm deploy| API
     API --> DB
     Prom -->|scrapes metrics| API
     Graf -->|queries| Prom
 ```
 
+The frontend nginx container reverse-proxies `/api/*` to the backend (`BACKEND_HOST` / `BACKEND_PORT` env vars). The same image works in Docker, raw Kubernetes manifests, and Helm without rebuilding.
+
 ## Project Structure
 
 ```
 employee-management-system/
+├── frontend/                # React (Vite) UI + nginx Dockerfile
 ├── backend/                 # Express REST API
-│   ├── app.js
-│   ├── app.test.js
-│   ├── db.js
-│   ├── routes/
-│   └── Dockerfile
 ├── helm/employee-management # Application Helm chart
 ├── k8s/                     # Raw Kubernetes manifests
+│   ├── frontend/
 │   ├── backend/
 │   ├── config/
-│   ├── jenkins/             # Jenkins deployer RBAC
+│   ├── jenkins/
 │   └── postgres/
 ├── jenkins/                 # Jenkins Helm chart
 ├── monitoring/              # Prometheus + Grafana Helm chart
-├── Jenkinsfile              # CI/CD pipeline
-└── frontend/                # UI (planned)
+└── Jenkinsfile              # CI/CD pipeline
 ```
 
-## Prerequisites
+## Local Development (without Kubernetes)
 
-- Node.js 18+ (22 recommended for Docker)
-- npm
-- PostgreSQL 17 (local or container)
-- Docker (optional, for container builds)
-- kubectl and Helm 3 (for Kubernetes deployment)
-- Rancher Desktop (recommended for local Kubernetes)
+Run backend and frontend on your machine for fast iteration.
 
-## Local Development
-
-### 1. Install dependencies
+### Terminal 1 — Backend
 
 ```bash
 cd backend
 npm install
+cp .env.example .env   # edit DB credentials
+npm start
 ```
 
-### 2. Configure environment
+API: http://localhost:5000
 
-Copy the example env file and edit credentials:
-
-```bash
-cp backend/.env.example backend/.env
-```
-
-### 3. Set up the database
-
-Connect to PostgreSQL and run:
+Create the `employees` table in PostgreSQL (once):
 
 ```sql
 CREATE TABLE IF NOT EXISTS employees (
@@ -119,114 +213,79 @@ CREATE TABLE IF NOT EXISTS employees (
 );
 ```
 
-### 4. Start the server
+### Terminal 2 — Frontend
 
 ```bash
-npm start
+cd frontend
+npm install
+npm run dev
 ```
 
-The API runs at `http://localhost:5000`.
+UI: http://localhost:5173 (Vite proxies `/api/*` → `http://localhost:5000`)
 
 ### Verify
 
 ```bash
-curl http://localhost:5000/
-curl http://localhost:5000/db-test
 curl http://localhost:5000/employees
-```
-
-## API Endpoints
-
-| Method | Endpoint      | Description              |
-| ------ | ------------- | ------------------------ |
-| GET    | `/`           | Health check message     |
-| GET    | `/db-test`    | Test database connection |
-| GET    | `/employees`  | List all employees       |
-| POST   | `/employees`  | Create a new employee    |
-
-### Create an employee
-
-```bash
 curl -X POST http://localhost:5000/employees \
   -H "Content-Type: application/json" \
   -d '{"name": "Jane Doe", "age": 30, "department": "Engineering"}'
 ```
 
-**Request body:**
+## API Endpoints
 
-```json
-{
-  "name": "Jane Doe",
-  "age": 30,
-  "department": "Engineering"
-}
-```
+| Method | Endpoint     | Description              |
+| ------ | ------------ | ------------------------ |
+| GET    | `/`          | Health check message     |
+| GET    | `/db-test`   | Test database connection |
+| GET    | `/employees` | List all employees       |
+| POST   | `/employees` | Create a new employee    |
 
-**Response (201):**
-
-```json
-{
-  "id": 1,
-  "name": "Jane Doe",
-  "age": 30,
-  "department": "Engineering"
-}
-```
+**POST body:** `{ "name": "Jane Doe", "age": 30, "department": "Engineering" }`
 
 ## Docker
 
-Build and run the backend image from the `backend` directory:
+**Backend:**
 
 ```bash
 cd backend
-docker build -t employee-backend:latest .
-docker run -p 5000:5000 --env-file .env employee-backend:latest
+docker build -t soumyasitak/employee-backend:latest .
+docker run -p 5000:5000 --env-file .env soumyasitak/employee-backend:latest
 ```
 
-## Kubernetes Deployment
+**Frontend** (needs a running backend):
 
-Deploy Postgres and the backend using the raw manifests in `k8s/`:
+```bash
+cd frontend
+docker build -t soumyasitak/employee-frontend:latest .
+docker run -p 8080:80 \
+  -e BACKEND_HOST=host.docker.internal \
+  -e BACKEND_PORT=5000 \
+  soumyasitak/employee-frontend:latest
+```
+
+Open http://localhost:8080
+
+## Kubernetes (raw manifests)
 
 ```bash
 kubectl apply -f k8s/config/
 kubectl apply -f k8s/postgres/
 kubectl apply -f k8s/backend/
+kubectl apply -f k8s/frontend/
 ```
 
-Check status:
+Create the `employees` table (see [Quick Start step 4](#4-create-the-database-table-first-time-only)) using pod label `app=postgres` and service `postgres-service` if not using Helm.
 
 ```bash
-kubectl get pods
-kubectl get svc
+kubectl port-forward svc/frontend-service 8080:80
 ```
 
-> **Note:** Update credentials in `k8s/config/*-secret.yaml` before deploying to production. Do not use default passwords in live environments.
+> Update credentials in `k8s/config/*-secret.yaml` before production use.
 
 ## Helm Deployment
 
-Install or upgrade the application with Helm:
-
-```bash
-helm upgrade --install employee-management ./helm/employee-management
-```
-
-Customize replicas, image tag, or Postgres storage in `helm/employee-management/values.yaml`:
-
-```yaml
-backend:
-  replicaCount: 2
-  image:
-    repository: soumyasitak/employee-backend
-    tag: latest
-
-postgres:
-  storage:
-    size: 1Gi
-  image:
-    tag: "17"
-```
-
-Deploy to a specific namespace:
+Default install (pulls images from Docker Hub):
 
 ```bash
 helm upgrade --install employee-management ./helm/employee-management \
@@ -234,139 +293,122 @@ helm upgrade --install employee-management ./helm/employee-management \
   --create-namespace
 ```
 
+Key values in `helm/employee-management/values.yaml`:
+
+```yaml
+backend:
+  replicaCount: 2
+  image:
+    repository: soumyasitak/employee-backend
+    tag: latest
+    pullPolicy: Always
+
+frontend:
+  replicaCount: 2
+  image:
+    repository: soumyasitak/employee-frontend
+    tag: latest
+    pullPolicy: Always
+```
+
+For **local images** on Rancher Desktop, use `tag: local` and `pullPolicy: IfNotPresent` (see [Quick Start](#quick-start-rancher-desktop)).
+
 ## CI/CD (Jenkins)
 
-### One-time cluster setup
+### One-time setup
 
 ```bash
 kubectl apply -f k8s/jenkins/jenkins-deployer-rbac.yaml
-kubectl get sa jenkins-deployer -n jenkins
 ```
+
+Install Jenkins from `./jenkins` (see [jenkins/README.md](jenkins/README.md)).
+
+### Jenkins credentials
+
+| ID                     | Purpose              |
+| ---------------------- | -------------------- |
+| `github-pat`           | Git checkout         |
+| `dockerhub-credentials`| Push backend + frontend images |
+
+### Pipeline flow
+
+1. Backend: `npm ci`, `npm test`
+2. Frontend: `npm ci`, `npm run build`
+3. Kaniko: build and push **both** images to Docker Hub
+4. `helm lint` and deploy to `dev` (on `master` only)
+5. Ensure `employees` table exists
+6. Verify backend and frontend rollouts
 
 ### Access Jenkins
-
-Retrieve the admin credentials from the cluster (do not store passwords in this repo):
-
-```bash
-# Username
-kubectl get secret jenkins -n jenkins -o jsonpath="{.data.jenkins-admin-user}" | base64 -d && echo
-
-# Password
-kubectl get secret jenkins -n jenkins -o jsonpath="{.data.jenkins-admin-password}" | base64 -d && echo
-```
-
-**Local access** (from a machine with `kubectl` configured):
 
 ```bash
 kubectl port-forward -n jenkins svc/jenkins 8081:8080
 ```
 
-Open `http://localhost:8081` in your browser.
+Open http://localhost:8081
 
-**Remote access via SSH tunnel** (e.g. Jenkins runs on a Windows host; forward from your laptop):
-
-```bash
-# Interactive session with port forward
-ssh -L 8080:localhost:8080 user@windows-host
-
-# Background tunnel only (no remote shell)
-ssh -N -L 8080:localhost:8080 user@windows-host
-```
-
-Then open `http://localhost:8080`. Replace `user@windows-host` with your SSH user and host.
-
-> **Security:** Store GitHub PAT and Docker Hub credentials only in Jenkins (**Manage Jenkins → Credentials**), never in `README.md` or git. If a token was exposed, revoke it in GitHub and create a new one.
-
-### Jenkins credentials required
-
-| ID | Type | Purpose |
-| ---- | ------ | --------- |
-| `github-pat` | Username/password or secret text | Git checkout |
-| `dockerhub-credentials` | Username/password | Push Docker image |
-
-### Pipeline flow
-
-1. `npm ci` and `npm test`
-2. Build and push image to Docker Hub (`BUILD_NUMBER` and `GIT_COMMIT` tags)
-3. `helm lint`
-4. Deploy to `dev` namespace (only on `master` branch)
-5. Ensure `employees` table exists (non-destructive; preserves existing data)
-6. Verify rollout with `kubectl rollout status`
-
-### Trigger a deploy
-
-Push to `master` — Jenkins runs the pipeline from `Jenkinsfile`.
-
-Configure a **Pipeline** job with **Pipeline script from SCM**, branch `master`, script path `Jenkinsfile`. Ensure agent pods run in the `jenkins` namespace (where `jenkins-deployer` ServiceAccount exists).
-
-### Verify after deploy
+### After deploy
 
 ```bash
 kubectl get pods -n dev
-kubectl port-forward -n dev svc/employee-management-employee-backend-service 5000:5000
-curl http://localhost:5000/
-curl http://localhost:5000/employees
+kubectl port-forward -n dev svc/employee-management-employee-frontend-service 8080:80
 ```
 
-> **Note:** Postgres data is stored on a PVC and is never deleted by the pipeline. If the `employees` table is missing, the pipeline creates it with `CREATE TABLE IF NOT EXISTS` without affecting existing rows.
-
-## Monitoring (Prometheus + Grafana)
-
-### One-time setup
+## Monitoring
 
 ```bash
 helm dependency update ./monitoring
-helm upgrade --install monitoring ./monitoring \
-  --namespace monitoring \
-  --create-namespace
+helm upgrade --install monitoring ./monitoring -n monitoring --create-namespace
 ```
 
-### Access Grafana and Prometheus
+Details: [monitoring/README.md](monitoring/README.md)
 
-```bash
-# Grafana (http://localhost:3000 — admin / admin)
-kubectl port-forward -n monitoring svc/monitoring-grafana 3000:80
+## Demo Walkthrough (presentation)
 
-# Prometheus (http://localhost:9090)
-kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-prometheus 9090:9090
-```
-
-In Grafana: **Dashboards → Browse** → open a Kubernetes dashboard, or use **Explore** with:
-
-```promql
-up
-count(kube_pod_info) by (namespace)
-```
-
-See [monitoring/README.md](monitoring/README.md) for full configuration and uninstall steps.
-
-## Demo Walkthrough
-
-Suggested order for a live presentation:
-
-1. **Architecture** — walk through the diagram above (app, CI/CD, monitoring)
-2. **API** — `curl http://localhost:5000/employees` or port-forward the deployed backend
-3. **Kubernetes** — `kubectl get pods -n dev` and `kubectl get pods -n monitoring`
-4. **Jenkins** — show pipeline stages (test → build → deploy)
-5. **Grafana** — open Kubernetes dashboards and run `up` in Explore
-6. **Prometheus** — show **Status → Targets** to demonstrate metric scraping
+1. Architecture diagram (above)
+2. UI at http://localhost:8080 — add an employee live
+3. `kubectl get pods -n dev` and `-n monitoring`
+4. Jenkins pipeline (both images)
+5. Grafana dashboards + `up` in Explore
+6. Prometheus **Status → Targets**
 
 ## Environment Variables
 
-| Variable      | Description           | Example            |
-| ------------- | --------------------- | ------------------ |
-| `DB_HOST`     | PostgreSQL host       | `localhost`        |
-| `DB_PORT`     | PostgreSQL port       | `5432`             |
-| `DB_USER`     | Database user         | `admin`            |
-| `DB_PASSWORD` | Database password     | (set via secret)   |
-| `DB_NAME`     | Database name         | `employee_db`      |
+### Backend
+
+| Variable      | Description     | Example       |
+| ------------- | --------------- | ------------- |
+| `DB_HOST`     | PostgreSQL host | `localhost`   |
+| `DB_PORT`     | PostgreSQL port | `5432`        |
+| `DB_USER`     | Database user   | `admin`       |
+| `DB_PASSWORD` | Password        | (from secret) |
+| `DB_NAME`     | Database name   | `employee_db` |
+
+### Frontend (container)
+
+| Variable       | Description              | Default (raw k8s)   |
+| -------------- | ------------------------ | ------------------- |
+| `BACKEND_HOST` | Backend service hostname | `backend-service`   |
+| `BACKEND_PORT` | Backend port             | `5000`              |
+
+Helm sets these automatically via `frontend-config` ConfigMap.
+
+## Troubleshooting
+
+| Problem | Fix |
+| ------- | --- |
+| `ImagePullBackOff` on Rancher Desktop | Build images locally and set `pullPolicy: IfNotPresent` + `tag: local` |
+| Empty employee list / API errors | Run the `CREATE TABLE` SQL on Postgres (Quick Start step 4) |
+| Frontend shows data in UI but Grafana empty | Use internal service URL in Grafana datasource: `http://monitoring-kube-prometheus-prometheus:9090` |
+| `connection refused` on port-forward | Start Rancher Desktop; wait until `kubectl get nodes` shows `Ready` |
+| Local dev: frontend cannot reach API | Start backend on port 5000 first; Vite proxies `/api` automatically |
 
 ## Roadmap
 
-- [ ] Frontend UI
+- [x] Frontend UI (React + Vite)
 - [x] CI/CD pipeline (Jenkins)
 - [x] Monitoring stack (Prometheus + Grafana)
-- [ ] Application metrics (`/metrics` endpoint on backend)
+- [ ] Application metrics (`/metrics` on backend)
 - [ ] Ingress and TLS
 - [x] Unit tests (backend health check)
 

@@ -1,7 +1,8 @@
 pipeline {
 
     environment {
-        DOCKER_IMAGE = 'soumyasitak/employee-backend'
+        DOCKER_IMAGE_BACKEND = 'soumyasitak/employee-backend'
+        DOCKER_IMAGE_FRONTEND = 'soumyasitak/employee-frontend'
         NAMESPACE = 'dev'
     }
 
@@ -47,7 +48,7 @@ spec:
 
     stages {
 
-        stage('Install Dependencies') {
+        stage('Install Backend Dependencies') {
             steps {
                 dir('backend') {
                     sh 'npm ci'
@@ -63,7 +64,16 @@ spec:
             }
         }
 
-        stage('Build and Push Docker Image') {
+        stage('Build Frontend') {
+            steps {
+                dir('frontend') {
+                    sh 'npm ci'
+                    sh 'npm run build'
+                }
+            }
+        }
+
+        stage('Build and Push Docker Images') {
             steps {
                 container('kaniko') {
                     withCredentials([
@@ -85,8 +95,14 @@ EOF
                             /kaniko/executor \
                                 --context="${WORKSPACE}/backend" \
                                 --dockerfile="${WORKSPACE}/backend/Dockerfile" \
-                                --destination="${DOCKER_IMAGE}:${BUILD_NUMBER}" \
-                                --destination="${DOCKER_IMAGE}:${GIT_COMMIT}"
+                                --destination="${DOCKER_IMAGE_BACKEND}:${BUILD_NUMBER}" \
+                                --destination="${DOCKER_IMAGE_BACKEND}:${GIT_COMMIT}"
+
+                            /kaniko/executor \
+                                --context="${WORKSPACE}/frontend" \
+                                --dockerfile="${WORKSPACE}/frontend/Dockerfile" \
+                                --destination="${DOCKER_IMAGE_FRONTEND}:${BUILD_NUMBER}" \
+                                --destination="${DOCKER_IMAGE_FRONTEND}:${GIT_COMMIT}"
                         '''
                     }
                 }
@@ -112,8 +128,10 @@ EOF
                             ./helm/employee-management \
                             --namespace ${NAMESPACE} \
                             --create-namespace \
-                            --set backend.image.repository=${DOCKER_IMAGE} \
-                            --set backend.image.tag=${BUILD_NUMBER}
+                            --set backend.image.repository=${DOCKER_IMAGE_BACKEND} \
+                            --set backend.image.tag=${BUILD_NUMBER} \
+                            --set frontend.image.repository=${DOCKER_IMAGE_FRONTEND} \
+                            --set frontend.image.tag=${BUILD_NUMBER}
                     '''
                 }
             }
@@ -155,6 +173,9 @@ EOF
                 container('kubectl') {
                     sh '''
                         kubectl rollout status deployment/employee-management-employee-backend-deployment \
+                            -n ${NAMESPACE} --timeout=120s
+
+                        kubectl rollout status deployment/employee-management-employee-frontend-deployment \
                             -n ${NAMESPACE} --timeout=120s
                     '''
                 }

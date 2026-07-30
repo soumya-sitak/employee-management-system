@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: employee-frontend
+
+spec:
+  replicas: 2
+
+  selector:
+    matchLabels:
+      app: employee-frontend
+
+  template:
+    metadata:
+      labels:
+        app: employee-frontend
+
+    spec:
+      containers:
+        - name: frontend
+          image: soumyasitak/employee-frontend:latest
+          imagePullPolicy: Always
+
+          ports:
+            - containerPort: 80
+
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 15
+            periodSeconds: 20
+
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "250m"
+
+          envFrom:
+            - configMapRef:
+                name: frontend-config

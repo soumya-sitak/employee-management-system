@@ -66,6 +66,10 @@ Create the name of the service account to use
 {{ .Values.backend.name }}
 {{- end -}}
 
+{{- define "employee-management.frontend.name" -}}
+{{ .Values.frontend.name }}
+{{- end -}}
+
 {{- define "employee-management.postgres.name" -}}
 {{ .Values.postgres.name }}
 {{- end -}}
@@ -75,6 +79,13 @@ Backend Full Name
 */}}
 {{- define "employee-management.backend.fullname" -}}
 {{ printf "%s-%s" .Release.Name .Values.backend.name }}
+{{- end -}}
+
+{{/*
+Frontend Full Name
+*/}}
+{{- define "employee-management.frontend.fullname" -}}
+{{ printf "%s-%s" .Release.Name .Values.frontend.name }}
 {{- end -}}
 
 {{/*
