@@ -1,6 +1,6 @@
 # Employee Management System
 
-A full-stack employee management application with a Node.js REST API, PostgreSQL database, and Kubernetes deployment options (raw manifests and Helm).
+A cloud-native employee management application with a Node.js REST API, PostgreSQL database, Kubernetes deployments, Jenkins CI/CD, and Prometheus/Grafana monitoring.
 
 ## Features
 
@@ -10,15 +10,53 @@ A full-stack employee management application with a Node.js REST API, PostgreSQL
 - Kubernetes manifests for backend and Postgres
 - Helm chart for parameterized deployments
 - Jenkins CI/CD pipeline (build, test, deploy)
+- Prometheus and Grafana monitoring stack
 
 ## Tech Stack
 
-| Layer        | Technology              |
-| ------------ | ----------------------- |
-| Backend      | Node.js, Express 5      |
-| Database     | PostgreSQL 17           |
-| Container    | Docker                  |
-| Orchestration| Kubernetes, Helm        |
+| Layer         | Technology                        |
+| ------------- | --------------------------------- |
+| Backend       | Node.js, Express 5                |
+| Database      | PostgreSQL 17                     |
+| Container     | Docker                            |
+| Orchestration | Kubernetes, Helm                  |
+| CI/CD         | Jenkins, Kaniko                   |
+| Monitoring    | Prometheus, Grafana, Alertmanager |
+| Local K8s     | Rancher Desktop                   |
+
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph Dev["Developer"]
+        Git[Git Push]
+    end
+
+    subgraph CICD["CI/CD"]
+        Jenkins[Jenkins Pipeline]
+        Kaniko[Kaniko Build]
+        DockerHub[Docker Hub]
+    end
+
+    subgraph K8s["Kubernetes Cluster"]
+        subgraph App["dev namespace"]
+            API[employee-backend]
+            DB[(PostgreSQL)]
+        end
+        subgraph Monitor["monitoring namespace"]
+            Prom[Prometheus]
+            Graf[Grafana]
+        end
+    end
+
+    Git --> Jenkins
+    Jenkins --> Kaniko
+    Kaniko --> DockerHub
+    Jenkins -->|Helm deploy| API
+    API --> DB
+    Prom -->|scrapes metrics| API
+    Graf -->|queries| Prom
+```
 
 ## Project Structure
 
@@ -30,13 +68,14 @@ employee-management-system/
 │   ├── db.js
 │   ├── routes/
 │   └── Dockerfile
-├── helm/employee-management # Helm chart
+├── helm/employee-management # Application Helm chart
 ├── k8s/                     # Raw Kubernetes manifests
 │   ├── backend/
 │   ├── config/
 │   ├── jenkins/             # Jenkins deployer RBAC
 │   └── postgres/
 ├── jenkins/                 # Jenkins Helm chart
+├── monitoring/              # Prometheus + Grafana Helm chart
 ├── Jenkinsfile              # CI/CD pipeline
 └── frontend/                # UI (planned)
 ```
@@ -48,6 +87,7 @@ employee-management-system/
 - PostgreSQL 17 (local or container)
 - Docker (optional, for container builds)
 - kubectl and Helm 3 (for Kubernetes deployment)
+- Rancher Desktop (recommended for local Kubernetes)
 
 ## Local Development
 
@@ -60,14 +100,10 @@ npm install
 
 ### 2. Configure environment
 
-Create `backend/.env`:
+Copy the example env file and edit credentials:
 
-```env
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=your_user
-DB_PASSWORD=your_password
-DB_NAME=employee_db
+```bash
+cp backend/.env.example backend/.env
 ```
 
 ### 3. Set up the database
@@ -274,6 +310,47 @@ curl http://localhost:5000/employees
 
 > **Note:** Postgres data is stored on a PVC and is never deleted by the pipeline. If the `employees` table is missing, the pipeline creates it with `CREATE TABLE IF NOT EXISTS` without affecting existing rows.
 
+## Monitoring (Prometheus + Grafana)
+
+### One-time setup
+
+```bash
+helm dependency update ./monitoring
+helm upgrade --install monitoring ./monitoring \
+  --namespace monitoring \
+  --create-namespace
+```
+
+### Access Grafana and Prometheus
+
+```bash
+# Grafana (http://localhost:3000 — admin / admin)
+kubectl port-forward -n monitoring svc/monitoring-grafana 3000:80
+
+# Prometheus (http://localhost:9090)
+kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-prometheus 9090:9090
+```
+
+In Grafana: **Dashboards → Browse** → open a Kubernetes dashboard, or use **Explore** with:
+
+```promql
+up
+count(kube_pod_info) by (namespace)
+```
+
+See [monitoring/README.md](monitoring/README.md) for full configuration and uninstall steps.
+
+## Demo Walkthrough
+
+Suggested order for a live presentation:
+
+1. **Architecture** — walk through the diagram above (app, CI/CD, monitoring)
+2. **API** — `curl http://localhost:5000/employees` or port-forward the deployed backend
+3. **Kubernetes** — `kubectl get pods -n dev` and `kubectl get pods -n monitoring`
+4. **Jenkins** — show pipeline stages (test → build → deploy)
+5. **Grafana** — open Kubernetes dashboards and run `up` in Explore
+6. **Prometheus** — show **Status → Targets** to demonstrate metric scraping
+
 ## Environment Variables
 
 | Variable      | Description           | Example            |
@@ -288,6 +365,8 @@ curl http://localhost:5000/employees
 
 - [ ] Frontend UI
 - [x] CI/CD pipeline (Jenkins)
+- [x] Monitoring stack (Prometheus + Grafana)
+- [ ] Application metrics (`/metrics` endpoint on backend)
 - [ ] Ingress and TLS
 - [x] Unit tests (backend health check)
 

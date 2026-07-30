@@ -2,11 +2,14 @@
 
 Prometheus and Grafana stack for the employee-management-system, based on [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack).
 
+Collects Kubernetes cluster metrics (CPU, memory, pods, nodes) and provides pre-built Grafana dashboards.
+
 ## Prerequisites
 
 - Kubernetes cluster (Rancher Desktop recommended)
 - `kubectl` and Helm 3
-- Chart dependencies downloaded (see below)
+
+> **Note:** After cloning the repo, run `helm dependency update ./monitoring` to download the chart (the `.tgz` is not committed to git).
 
 ## One-time setup
 
@@ -93,3 +96,14 @@ rate(container_cpu_usage_seconds_total{container!=""}[5m])
 ## Dashboards
 
 Built-in Kubernetes dashboards are auto-loaded. Go to **Dashboards → Browse** and search for "Kubernetes".
+
+## Presentation tips
+
+| Step | Action |
+| ---- | ------ |
+| 1 | `kubectl get pods -n monitoring` — show all components running |
+| 2 | Port-forward Grafana → open **Dashboards → Browse** |
+| 3 | Open **Kubernetes / Compute Resources / Namespace (Pods)** |
+| 4 | Set namespace to `dev` or `default` at the top |
+| 5 | **Explore** → run `up` to show live Prometheus data |
+| 6 | Port-forward Prometheus → **Status → Targets** to show scrape targets |
