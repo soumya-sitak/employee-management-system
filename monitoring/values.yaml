@@ -1,0 +1,37 @@
+# Values for the kube-prometheus-stack subchart.
+# Install: helm upgrade --install monitoring ./monitoring -n monitoring --create-namespace
+
+kube-prometheus-stack:
+  grafana:
+    adminPassword: admin
+    sidecar:
+      dashboards:
+        enabled: true
+      datasources:
+        enabled: true
+
+  prometheus:
+    prometheusSpec:
+      serviceMonitorSelectorNilUsesHelmValues: false
+      image:
+        registry: docker.io
+        repository: prom/prometheus
+        tag: v3.13.1
+
+  alertmanager:
+    alertmanagerSpec:
+      image:
+        registry: docker.io
+        repository: prom/alertmanager
+        tag: v0.33.1
+
+  prometheus-node-exporter:
+    image:
+      distroless: false
+      registry: docker.io
+      repository: prom/node-exporter
+      tag: v1.12.1
+
+  prometheusOperator:
+    prometheusDefaultBaseImageRegistry: docker.io
+    alertmanagerDefaultBaseImageRegistry: docker.io
